@@ -1,3 +1,13 @@
+---
+title: OpenEnv Customer Support
+emoji: headset
+colorFrom: teal
+colorTo: orange
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # OpenEnv Customer Support Environment
 
 ## Project Description
@@ -241,6 +251,23 @@ http://127.0.0.1:8000/
 docker build -t openenv-customer-support .
 docker run --rm -p 8000:8000 openenv-customer-support
 ```
+
+## Hugging Face Spaces
+
+This repo is prepared for a Docker Hugging Face Space.
+
+Key deployment details:
+
+- `README.md` includes Hugging Face Space metadata
+- the app binds to `PORT` and defaults to `7860`
+- the Docker image exposes port `7860`
+- `.env`, virtual environments, logs, and temp files are excluded from Space uploads
+
+To deploy:
+
+1. Create a new Space on Hugging Face and choose `Docker`
+2. Push this repository to the Space remote
+3. Open the Space URL once the build finishes
 
 ## How to Run Inference
 
