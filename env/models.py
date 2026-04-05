@@ -1,24 +1,28 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class Priority(StrEnum):
+class StringEnum(str, Enum):
+    pass
+
+
+class Priority(StringEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class ActionType(StrEnum):
+class ActionType(StringEnum):
     CLASSIFY = "classify"
     REPLY = "reply"
     ESCALATE = "escalate"
 
 
-class TicketCategory(StrEnum):
+class TicketCategory(StringEnum):
     BILLING = "billing"
     TECHNICAL = "technical"
     ACCOUNT_ACCESS = "account_access"
