@@ -14,6 +14,7 @@ WRONG_CLASSIFICATION_PENALTY = 0.2
 WRONG_ESCALATION_PENALTY = 0.2
 UNSAFE_REPLY_PENALTY = 0.1
 WEAK_REPLY_PENALTY = 0.1
+REWARD_SCALE = 0.999
 
 
 @dataclass
@@ -36,6 +37,10 @@ def _clamp_score(value: float) -> float:
     return rounded
 
 
+def _reward_score(value: float) -> float:
+    return _clamp_score(float(value) * REWARD_SCALE)
+
+
 class DeterministicGrader:
     def evaluate_action(self, ticket_case: TicketCase, action: Action, progress: TicketProgress) -> GradeResult:
         expectation = ticket_case.expected_outputs
@@ -53,7 +58,7 @@ class DeterministicGrader:
             progress.penalties += DUPLICATE_ACTION_PENALTY
             feedback = "Duplicate action penalty applied."
             return GradeResult(
-                reward=Reward(score=_clamp_score(0.0), feedback=feedback),
+                reward=Reward(score=_reward_score(0.0), feedback=feedback),
                 raw_delta=-DUPLICATE_ACTION_PENALTY,
                 feedback=feedback,
             )
@@ -70,7 +75,7 @@ class DeterministicGrader:
             progress.penalties += WRONG_ORDER_PENALTY
             feedback = "Wrong action order penalty applied."
             return GradeResult(
-                reward=Reward(score=_clamp_score(0.0), feedback=feedback),
+                reward=Reward(score=_reward_score(0.0), feedback=feedback),
                 raw_delta=-WRONG_ORDER_PENALTY,
                 feedback=feedback,
             )
@@ -146,7 +151,7 @@ class DeterministicGrader:
 
         feedback = " ".join(feedback_parts) or "Action evaluated."
         return GradeResult(
-            reward=Reward(score=_clamp_score(max(raw_delta, 0.0)), feedback=feedback),
+            reward=Reward(score=_reward_score(max(raw_delta, 0.0)), feedback=feedback),
             raw_delta=round(raw_delta, 4),
             feedback=feedback,
         )
