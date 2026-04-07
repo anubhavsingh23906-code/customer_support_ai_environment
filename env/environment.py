@@ -59,6 +59,8 @@ class CustomerSupportEnv:
             advanced = self._advance_ticket()
 
         self.total_score = self._compute_total_score()
+        if self.done:
+            self.total_score = self._normalize_task_score(self.total_score)
         self.current_observation = (
             self._terminal_observation() if self.done else self._build_observation(self.current_ticket_index)
         )
@@ -99,6 +101,14 @@ class CustomerSupportEnv:
             return 0.0
         ticket_scores = [max(0.0, min(1.0, progress.raw_score)) for progress in self.ticket_progress]
         return round(sum(ticket_scores) / len(ticket_scores), 4)
+
+    def _normalize_task_score(self, value: float) -> float:
+        rounded = round(value, 4)
+        if rounded <= 0.0:
+            return 0.001
+        if rounded >= 1.0:
+            return 0.999
+        return rounded
 
     def _build_observation(self, ticket_index: int) -> Observation:
         ticket_case = self.task.input_tickets[ticket_index]

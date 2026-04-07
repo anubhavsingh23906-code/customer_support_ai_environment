@@ -19,7 +19,7 @@ class CustomerSupportEnvTests(unittest.TestCase):
                 self.assertEqual(observation.ticket_id, ticket_id)
                 self.assertEqual(env.state()["task_name"], task_name)
 
-    def test_easy_ticket_reaches_full_score(self):
+    def test_easy_ticket_reaches_task_score_within_open_interval(self):
         env = CustomerSupportEnv(task_name="easy")
         env.reset()
 
@@ -38,7 +38,9 @@ class CustomerSupportEnvTests(unittest.TestCase):
         self.assertEqual(reward_2.score, 0.6)
         self.assertFalse(done_1)
         self.assertTrue(done_2)
-        self.assertEqual(info["total_score"], 1.0)
+        self.assertGreater(info["total_score"], 0.0)
+        self.assertLess(info["total_score"], 1.0)
+        self.assertEqual(info["total_score"], 0.999)
 
     def test_hard_ticket_requires_multiple_actions_before_advancing(self):
         env = CustomerSupportEnv(task_name="hard")

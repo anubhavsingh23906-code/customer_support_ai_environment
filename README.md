@@ -330,7 +330,7 @@ The repository includes `run.ps1` for common development tasks:
 [START] Task=easy
 [STEP] step=1 action={"action_type":"classify","content":"billing"} reward=0.400
 [STEP] step=2 action={"action_type":"reply","content":"We are reviewing the billing issue..."} reward=0.600
-[END] Task=easy TotalScore=1.000
+[END] Task=easy TotalScore=0.999
 ```
 
 The exact action content and reward values depend on the model output, but the line format remains fixed.
