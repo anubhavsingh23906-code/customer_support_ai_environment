@@ -130,6 +130,23 @@ class InferenceTests(unittest.TestCase):
         self.assertIn("[END] Task=hard", output)
         self.assertIn("[DEBUG] step=1 source=fallback reason=Inference request failed: RuntimeError: offline", output)
 
+    def test_main_runs_in_fallback_mode_when_env_vars_are_missing(self):
+        buffer = io.StringIO()
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("inference._load_local_env", return_value=None),
+            redirect_stdout(buffer),
+        ):
+            inference.main()
+
+        output = buffer.getvalue()
+        self.assertIn("[START] Task=easy", output)
+        self.assertIn("[END] Task=hard", output)
+        self.assertIn(
+            "[DEBUG] step=1 source=fallback reason=Inference request failed: RuntimeError: OpenAI runtime config unavailable; using built-in fallback policy.",
+            output,
+        )
+
     def test_strict_mode_raises_instead_of_using_fallback(self):
         with patch.dict(os.environ, {"OPENENV_STRICT_INFERENCE": "1"}, clear=False):
             with self.assertRaisesRegex(RuntimeError, "Inference request failed: RuntimeError: offline"):
@@ -199,6 +216,36 @@ class InferenceTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_script_succeeds_without_openai_env_vars(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        temp_dir = repo_root / "tests" / f"tmp_script_{uuid.uuid4().hex}"
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(repo_root / "inference.py", temp_dir / "inference.py")
+            shutil.copytree(repo_root / "env", temp_dir / "env")
+
+            env = os.environ.copy()
+            env.pop("OPENAI_API_KEY", None)
+            env.pop("API_BASE_URL", None)
+            env.pop("MODEL_NAME", None)
+            env.pop("OPENENV_STRICT_INFERENCE", None)
+
+            result = subprocess.run(
+                ["python", "inference.py"],
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=60,
+            )
+
+            self.assertEqual(result.returncode, 0)
+            self.assertIn("[WARN] Inference configuration unavailable: Missing required environment variable: OPENAI_API_KEY", result.stderr)
+            self.assertIn("[START] Task=easy", result.stdout)
+            self.assertIn("[END] Task=hard", result.stdout)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_format_inference_error_shortens_insufficient_quota(self):
         request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
         response = httpx.Response(
@@ -216,6 +263,14 @@ class InferenceTests(unittest.TestCase):
 
         self.assertIn("OpenAI quota exceeded for this API key or organization.", message)
         self.assertIn("billing/overview", message)
+
+    def test_format_inference_error_for_missing_env_is_short(self):
+        message = inference._format_inference_error(RuntimeError("Missing required environment variable: OPENAI_API_KEY"))
+
+        self.assertEqual(
+            message,
+            "Inference configuration unavailable: Missing required environment variable: OPENAI_API_KEY",
+        )
 
 
 if __name__ == "__main__":

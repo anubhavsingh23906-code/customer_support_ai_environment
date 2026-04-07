@@ -22,6 +22,14 @@ EXAMPLE_API_KEY_VALUES = {
 }
 
 
+class OfflineFallbackClient:
+    class chat:
+        class completions:
+            @staticmethod
+            def create(*args, **kwargs):
+                raise RuntimeError("OpenAI runtime config unavailable; using built-in fallback policy.")
+
+
 def _normalize_env_value(key: str, value: str) -> str:
     cleaned = value.strip().strip("\"'")
     if key == "API_BASE_URL":
@@ -105,6 +113,12 @@ def _get_runtime_config() -> tuple[str, str, str]:
 def _format_inference_error(exc: Exception) -> str:
     base_url = os.getenv("API_BASE_URL", "<missing>")
     model_name = os.getenv("MODEL_NAME", "<missing>")
+    if isinstance(exc, RuntimeError):
+        message = str(exc)
+        if message.startswith("Missing required environment variable:"):
+            return f"Inference configuration unavailable: {message}"
+        if "example value" in message or "must start with http://" in message or "must not be empty" in message:
+            return f"Inference configuration unavailable: {message}"
 
     if isinstance(exc, AuthenticationError):
         return (
@@ -151,6 +165,17 @@ def print_runtime_check() -> None:
 def _build_client() -> OpenAI:
     api_key, base_url, _ = _get_runtime_config()
     return OpenAI(api_key=api_key, base_url=base_url)
+
+
+def _build_runtime() -> tuple[OpenAI | OfflineFallbackClient, str]:
+    try:
+        _, _, model_name = _get_runtime_config()
+        return _build_client(), model_name
+    except RuntimeError as exc:
+        if _strict_inference_enabled():
+            raise
+        print(f"[WARN] {_format_inference_error(exc)}", file=sys.stderr)
+        return OfflineFallbackClient(), "offline-fallback"
 
 
 def _build_messages(observation: Observation) -> list[dict[str, str]]:
@@ -283,8 +308,7 @@ def run_task(client: OpenAI, model_name: str, task_name: str) -> float:
 
 def main() -> None:
     _load_local_env()
-    _, _, model_name = _get_runtime_config()
-    client = _build_client()
+    client, model_name = _build_runtime()
     for task_name in list_tasks():
         run_task(client, model_name, task_name)
 
