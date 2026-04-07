@@ -323,7 +323,7 @@ def run_task(client: OpenAI, model_name: str, task_name: str) -> float:
         action, source, error_message = _resolve_action(client, model_name, observation)
 
         observation, reward, done, info = env.step(action)
-        print(f"[STEP] step={step_number} action={action.model_dump_json()} reward={reward.score:.3f}")
+        print(f"[STEP] step={step_number} action={action.model_dump_json()} reward={reward.score:.6f}")
         if source == "fallback" and error_message:
             print(f"[DEBUG] step={step_number} source=fallback reason={error_message}")
         else:

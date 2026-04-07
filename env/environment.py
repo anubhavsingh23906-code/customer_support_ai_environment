@@ -4,6 +4,8 @@ from .grader import DeterministicGrader
 from .models import Action, EnvironmentSnapshot, Observation, Priority, Reward, TaskDefinition, TicketCase, TicketProgress
 from .tasks import get_task, list_tasks
 
+STEP_REWARD_EPSILON = 0.0001
+
 
 class CustomerSupportEnv:
     def __init__(self, task_name: str = "easy") -> None:
@@ -16,6 +18,7 @@ class CustomerSupportEnv:
         self.done = False
         self.ticket_progress: list[TicketProgress] = []
         self.total_score = 0.0
+        self.emitted_reward_total = 0.0
         self.current_observation = self._terminal_observation()
         self.reset()
 
@@ -30,12 +33,13 @@ class CustomerSupportEnv:
         self.done = False
         self.ticket_progress = [TicketProgress() for _ in self.task.input_tickets]
         self.total_score = self._normalize_task_score(0.0)
+        self.emitted_reward_total = 0.0
         self.current_observation = self._build_observation(self.current_ticket_index)
         return self.current_observation
 
     def step(self, action: Action | dict) -> tuple[Observation, Reward, bool, dict]:
         if self.done:
-            reward = Reward(score=0.001, feedback="Episode already complete.")
+            reward = Reward(score=STEP_REWARD_EPSILON, feedback="Episode already complete.")
             return self.current_observation, reward, True, self._build_info(False, True, reward.feedback)
 
         parsed_action = action if isinstance(action, Action) else Action.model_validate(action)
@@ -62,8 +66,9 @@ class CustomerSupportEnv:
         self.current_observation = (
             self._terminal_observation() if self.done else self._build_observation(self.current_ticket_index)
         )
+        reward = self._build_task_reward(grade_result.feedback)
         info = self._build_info(advanced, ticket_completed, grade_result.feedback)
-        return self.current_observation, grade_result.reward, self.done, info
+        return self.current_observation, reward, self.done, info
 
     def state(self) -> dict:
         snapshot = EnvironmentSnapshot(
@@ -109,6 +114,20 @@ class CustomerSupportEnv:
         if rounded >= 1.0:
             return 0.999
         return rounded
+
+    def _build_task_reward(self, feedback: str) -> Reward:
+        if self.done:
+            reward_score = max(
+                STEP_REWARD_EPSILON,
+                round(self.total_score - self.emitted_reward_total, 6),
+            )
+        else:
+            reward_score = STEP_REWARD_EPSILON
+
+        reward_score = min(self.total_score, reward_score) if self.done else reward_score
+        reward_score = max(STEP_REWARD_EPSILON, min(0.999, float(reward_score)))
+        self.emitted_reward_total = round(self.emitted_reward_total + reward_score, 6)
+        return Reward(score=reward_score, feedback=feedback)
 
     def _build_observation(self, ticket_index: int) -> Observation:
         ticket_case = self.task.input_tickets[ticket_index]
