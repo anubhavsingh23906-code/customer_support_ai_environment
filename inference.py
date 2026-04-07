@@ -51,7 +51,7 @@ def _should_replace_env_value(key: str, current_value: str | None) -> bool:
         return True
     raw_value = current_value.strip().strip("\"'")
     current_value = _normalize_env_value(key, current_value)
-    if key == "OPENAI_API_KEY":
+    if key in {"OPENAI_API_KEY", "API_KEY"}:
         return _is_placeholder_api_key(current_value)
     if key == "API_BASE_URL":
         return raw_value.startswith("=") or not _looks_like_http_url(current_value)
@@ -82,14 +82,41 @@ def _require_env(name: str) -> str:
     return value
 
 
+def _require_api_key() -> str:
+    api_key = _normalize_env_value("API_KEY", os.getenv("API_KEY", ""))
+    openai_api_key = _normalize_env_value("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+
+    if api_key and not _is_placeholder_api_key(api_key):
+        return api_key
+    if openai_api_key and not _is_placeholder_api_key(openai_api_key):
+        return openai_api_key
+    if api_key:
+        return api_key
+    if openai_api_key:
+        return openai_api_key
+    if not api_key and not openai_api_key:
+        raise RuntimeError("Missing required environment variable: API_KEY")
+    return ""
+
+
+def _get_model_name() -> str:
+    model_name = (
+        os.getenv("MODEL_NAME")
+        or os.getenv("MODEL")
+        or os.getenv("OPENAI_MODEL")
+        or "gpt-4.1-mini"
+    )
+    return _normalize_env_value("MODEL_NAME", model_name)
+
+
 def _strict_inference_enabled() -> bool:
     return os.getenv("OPENENV_STRICT_INFERENCE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _get_runtime_config() -> tuple[str, str, str]:
-    api_key = _normalize_env_value("OPENAI_API_KEY", _require_env("OPENAI_API_KEY"))
+    api_key = _normalize_env_value("API_KEY", _require_api_key())
     base_url = _normalize_env_value("API_BASE_URL", _require_env("API_BASE_URL"))
-    model_name = _normalize_env_value("MODEL_NAME", _require_env("MODEL_NAME"))
+    model_name = _get_model_name()
 
     if _is_placeholder_api_key(api_key):
         raise RuntimeError(
@@ -105,6 +132,7 @@ def _get_runtime_config() -> tuple[str, str, str]:
         raise RuntimeError("MODEL_NAME must not be empty.")
 
     os.environ["OPENAI_API_KEY"] = api_key
+    os.environ["API_KEY"] = api_key
     os.environ["API_BASE_URL"] = base_url
     os.environ["MODEL_NAME"] = model_name
     return api_key, base_url, model_name
@@ -317,5 +345,5 @@ if __name__ == "__main__":
     try:
         main()
     except RuntimeError as exc:
-        print(f"[ERROR] {exc}", file=sys.stderr)
+        print(f"[ERROR] {_format_inference_error(exc)}", file=sys.stderr)
         raise SystemExit(1) from None

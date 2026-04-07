@@ -70,7 +70,7 @@ class InferenceTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "OPENAI_API_KEY": "your_api_key_here",
+                "API_KEY": "your_api_key_here",
                 "API_BASE_URL": "https://api.openai.com/v1",
                 "MODEL_NAME": "gpt-4.1-mini",
             },
@@ -78,6 +78,37 @@ class InferenceTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "example value"):
                 inference._get_runtime_config()
+
+    def test_get_runtime_config_accepts_api_key_alias(self):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "proxy_key",
+                "OPENAI_API_KEY": "your_api_key_here",
+                "API_BASE_URL": "https://proxy.example.com/v1",
+                "MODEL_NAME": "proxy-model",
+            },
+            clear=False,
+        ):
+            api_key, base_url, model_name = inference._get_runtime_config()
+
+            self.assertEqual(api_key, "proxy_key")
+            self.assertEqual(base_url, "https://proxy.example.com/v1")
+            self.assertEqual(model_name, "proxy-model")
+            self.assertEqual(os.environ["OPENAI_API_KEY"], "proxy_key")
+
+    def test_get_runtime_config_uses_default_model_name(self):
+        with patch.dict(
+            os.environ,
+            {
+                "API_KEY": "proxy_key",
+                "API_BASE_URL": "https://proxy.example.com/v1",
+            },
+            clear=True,
+        ):
+            _, _, model_name = inference._get_runtime_config()
+
+            self.assertEqual(model_name, "gpt-4.1-mini")
 
     def test_get_runtime_config_rejects_invalid_base_url(self):
         with patch.dict(
@@ -198,6 +229,7 @@ class InferenceTests(unittest.TestCase):
 
             env = os.environ.copy()
             env.pop("OPENAI_API_KEY", None)
+            env.pop("API_KEY", None)
             env.pop("API_BASE_URL", None)
             env.pop("MODEL_NAME", None)
             env["OPENENV_STRICT_INFERENCE"] = "1"
@@ -212,7 +244,7 @@ class InferenceTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 1)
-            self.assertIn("[ERROR] OPENAI_API_KEY is still set to the example value.", result.stderr)
+            self.assertIn("[ERROR] Inference configuration unavailable: OPENAI_API_KEY is still set to the example value.", result.stderr)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -226,6 +258,7 @@ class InferenceTests(unittest.TestCase):
 
             env = os.environ.copy()
             env.pop("OPENAI_API_KEY", None)
+            env.pop("API_KEY", None)
             env.pop("API_BASE_URL", None)
             env.pop("MODEL_NAME", None)
             env.pop("OPENENV_STRICT_INFERENCE", None)
@@ -240,7 +273,7 @@ class InferenceTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0)
-            self.assertIn("[WARN] Inference configuration unavailable: Missing required environment variable: OPENAI_API_KEY", result.stderr)
+            self.assertIn("[WARN] Inference configuration unavailable: Missing required environment variable: API_KEY", result.stderr)
             self.assertIn("[START] Task=easy", result.stdout)
             self.assertIn("[END] Task=hard", result.stdout)
         finally:
@@ -265,11 +298,11 @@ class InferenceTests(unittest.TestCase):
         self.assertIn("billing/overview", message)
 
     def test_format_inference_error_for_missing_env_is_short(self):
-        message = inference._format_inference_error(RuntimeError("Missing required environment variable: OPENAI_API_KEY"))
+        message = inference._format_inference_error(RuntimeError("Missing required environment variable: API_KEY"))
 
         self.assertEqual(
             message,
-            "Inference configuration unavailable: Missing required environment variable: OPENAI_API_KEY",
+            "Inference configuration unavailable: Missing required environment variable: API_KEY",
         )
 
 
