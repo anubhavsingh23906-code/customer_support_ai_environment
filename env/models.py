@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .score_utils import safe_score
+
 
 class StringEnum(str, Enum):
     pass
@@ -55,8 +57,13 @@ class Action(BaseModel):
 
 
 class Reward(BaseModel):
-    score: float = Field(ge=1e-6, le=1 - 1e-6)
+    score: float = Field(gt=0.0, lt=1.0)
     feedback: str
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def validate_score(cls, value: float) -> float:
+        return safe_score(value)
 
 
 class TicketInput(BaseModel):

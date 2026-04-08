@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .models import Action, ActionType, Reward, TicketCase, TicketProgress
+from .score_utils import SCORE_EPSILON, safe_ratio, safe_score
 
 
 CLASSIFICATION_SCORE = 0.4
@@ -15,7 +16,6 @@ WRONG_ESCALATION_PENALTY = 0.2
 UNSAFE_REPLY_PENALTY = 0.1
 WEAK_REPLY_PENALTY = 0.1
 REWARD_SCALE = 0.999
-SCORE_EPSILON = 1e-6
 
 
 @dataclass
@@ -30,7 +30,7 @@ def _normalize(text: str) -> str:
 
 
 def _clamp_score(value: float) -> float:
-    return max(SCORE_EPSILON, min(1.0 - SCORE_EPSILON, round(float(value), 6)))
+    return safe_score(value)
 
 
 def _reward_score(value: float) -> float:
@@ -93,7 +93,7 @@ class DeterministicGrader:
         elif action_type == ActionType.REPLY:
             required_keywords = expectation.required_reply_keywords
             matched_keywords = [keyword for keyword in required_keywords if keyword in normalized_content]
-            coverage_ratio = len(matched_keywords) / len(required_keywords) if required_keywords else 1.0
+            coverage_ratio = safe_ratio(len(matched_keywords), len(required_keywords)) if required_keywords else (1.0 - SCORE_EPSILON)
             helpful_score = REPLY_SCORE * coverage_ratio
             unsafe_hits = [keyword for keyword in expectation.disallowed_reply_keywords if keyword in normalized_content]
             unsafe_penalty = min(len(unsafe_hits), 2) * UNSAFE_REPLY_PENALTY
@@ -148,6 +148,6 @@ class DeterministicGrader:
         feedback = " ".join(feedback_parts) or "Action evaluated."
         return GradeResult(
             reward=Reward(score=_reward_score(max(raw_delta, 0.0)), feedback=feedback),
-            raw_delta=round(raw_delta, 4),
+            raw_delta=float(raw_delta),
             feedback=feedback,
         )

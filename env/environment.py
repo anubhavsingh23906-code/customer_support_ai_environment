@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from .grader import DeterministicGrader
 from .models import Action, EnvironmentSnapshot, Observation, Priority, Reward, TaskDefinition, TicketCase, TicketProgress
+from .score_utils import SCORE_EPSILON, safe_score, safe_score_list, validate_scores
 from .tasks import get_task, list_tasks
-
-STEP_REWARD_EPSILON = 1e-6
 
 
 class CustomerSupportEnv:
@@ -32,14 +31,14 @@ class CustomerSupportEnv:
         self.step_count = 0
         self.done = False
         self.ticket_progress = [TicketProgress() for _ in self.task.input_tickets]
-        self.total_score = self._normalize_task_score(0.0)
+        self.total_score = safe_score(0.0)
         self.emitted_reward_total = 0.0
         self.current_observation = self._build_observation(self.current_ticket_index)
         return self.current_observation
 
     def step(self, action: Action | dict) -> tuple[Observation, Reward, bool, dict]:
         if self.done:
-            reward = Reward(score=STEP_REWARD_EPSILON, feedback="Episode already complete.")
+            reward = Reward(score=safe_score(0.0), feedback="Episode already complete.")
             return self.current_observation, reward, True, self._build_info(False, True, reward.feedback)
 
         parsed_action = action if isinstance(action, Action) else Action.model_validate(action)
@@ -75,14 +74,19 @@ class CustomerSupportEnv:
             task_name=self.task_name,
             current_ticket_index=self.current_ticket_index,
             step_count=self.step_count,
-            total_score=self._normalize_task_score(self.total_score),
+            total_score=safe_score(self.total_score),
             done=self.done,
             current_observation=self.current_observation,
             ticket_progress=self.ticket_progress,
         )
         payload = snapshot.model_dump()
+        payload["total_score"] = safe_score(payload["total_score"])
         for progress in payload["ticket_progress"]:
-            progress["raw_score"] = self._normalize_task_score(progress["raw_score"])
+            progress["raw_score"] = safe_score(progress["raw_score"])
+        validate_scores({"total_score": payload["total_score"]})
+        validate_scores(
+            {f"ticket_progress_{index}_raw_score": progress["raw_score"] for index, progress in enumerate(payload["ticket_progress"])}
+        )
         payload["available_tasks"] = self.available_tasks
         payload["task_metadata"] = self.task.metadata
         payload["task_expected_outputs"] = self.task.expected_outputs
@@ -103,25 +107,24 @@ class CustomerSupportEnv:
 
     def _compute_total_score(self) -> float:
         if not self.ticket_progress:
-            return self._normalize_task_score(0.0)
-        ticket_scores = [max(0.0, min(1.0, progress.raw_score)) for progress in self.ticket_progress]
-        return self._normalize_task_score(sum(ticket_scores) / len(ticket_scores))
+            return safe_score(0.0)
+        ticket_scores = [safe_score(max(0.0, min(1.0, float(progress.raw_score)))) for progress in self.ticket_progress]
+        return safe_score(sum(ticket_scores) / float(len(ticket_scores)))
 
     def _normalize_task_score(self, value: float) -> float:
-        return max(STEP_REWARD_EPSILON, min(1.0 - STEP_REWARD_EPSILON, round(float(value), 6)))
+        return safe_score(value)
 
     def _build_task_reward(self, feedback: str) -> Reward:
         if self.done:
-            reward_score = max(
-                STEP_REWARD_EPSILON,
-                round(self.total_score - self.emitted_reward_total, 6),
-            )
+            remaining_score = float(self.total_score) - float(self.emitted_reward_total)
+            reward_score = remaining_score if remaining_score > SCORE_EPSILON else SCORE_EPSILON
         else:
-            reward_score = STEP_REWARD_EPSILON
+            reward_score = SCORE_EPSILON
 
-        reward_score = min(self.total_score, reward_score) if self.done else reward_score
-        reward_score = max(STEP_REWARD_EPSILON, min(1.0 - STEP_REWARD_EPSILON, float(reward_score)))
-        self.emitted_reward_total = round(self.emitted_reward_total + reward_score, 6)
+        if self.done:
+            reward_score = min(float(self.total_score), float(reward_score))
+        reward_score = safe_score(reward_score)
+        self.emitted_reward_total = min(float(self.total_score), float(self.emitted_reward_total + reward_score))
         return Reward(score=reward_score, feedback=feedback)
 
     def _build_observation(self, ticket_index: int) -> Observation:
@@ -147,8 +150,9 @@ class CustomerSupportEnv:
         current_ticket_id = (
             self.task.input_tickets[self.current_ticket_index].input_ticket.ticket_id if not self.done else None
         )
-        ticket_scores = [round(max(0.0, min(1.0, progress.raw_score)), 4) for progress in self.ticket_progress]
-        ticket_scores = [self._normalize_task_score(score) for score in ticket_scores]
+        ticket_scores = safe_score_list(max(0.0, min(1.0, float(progress.raw_score))) for progress in self.ticket_progress)
+        total_score = safe_score(self.total_score)
+        validate_scores({"total_score": total_score, **{f"ticket_score_{index}": score for index, score in enumerate(ticket_scores)}})
         return {
             "task_name": self.task_name,
             "step_count": self.step_count,
@@ -157,7 +161,7 @@ class CustomerSupportEnv:
             "ticket_completed": ticket_completed,
             "advanced_to_next_ticket": advanced,
             "ticket_scores": ticket_scores,
-            "total_score": self.total_score,
+            "total_score": total_score,
             "done": self.done,
             "feedback": feedback,
         }

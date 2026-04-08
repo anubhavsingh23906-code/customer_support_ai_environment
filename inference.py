@@ -10,6 +10,7 @@ from openai import APIConnectionError, AuthenticationError, NotFoundError, OpenA
 
 from env.environment import CustomerSupportEnv
 from env.models import Action, ActionType, Observation
+from env.score_utils import safe_score, validate_scores
 from env.tasks import list_tasks
 
 
@@ -323,14 +324,17 @@ def run_task(client: OpenAI, model_name: str, task_name: str) -> float:
         action, source, error_message = _resolve_action(client, model_name, observation)
 
         observation, reward, done, info = env.step(action)
-        print(f"[STEP] step={step_number} action={action.model_dump_json()} reward={reward.score:.6f}")
+        logged_reward = safe_score(reward.score)
+        validate_scores({f"{task_name}_step_{step_number}_reward": logged_reward})
+        print(f"[STEP] step={step_number} action={action.model_dump_json()} reward={logged_reward}")
         if source == "fallback" and error_message:
             print(f"[DEBUG] step={step_number} source=fallback reason={error_message}")
         else:
             print(f"[DEBUG] step={step_number} source=model")
 
-    total_score = info["total_score"]
-    print(f"[END] Task={task_name} TotalScore={total_score:.6f}")
+    total_score = safe_score(info["total_score"])
+    validate_scores({f"{task_name}_total_score": total_score})
+    print(f"[END] Task={task_name} TotalScore={total_score}")
     return total_score
 
 

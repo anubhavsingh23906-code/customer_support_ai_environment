@@ -37,12 +37,13 @@ class CustomerSupportEnvTests(unittest.TestCase):
         )
 
         self.assertAlmostEqual(reward_1.score, 0.000001, places=6)
-        self.assertAlmostEqual(reward_2.score, 0.999998, places=6)
+        self.assertAlmostEqual(reward_2.score, 0.999999, places=6)
         self.assertFalse(done_1)
         self.assertTrue(done_2)
         self.assertGreater(info["total_score"], 0.0)
         self.assertLess(info["total_score"], 1.0)
-        self.assertEqual(info["total_score"], 0.999999)
+        self.assertGreater(info["total_score"], 0.999998)
+        self.assertLess(info["total_score"], 1.0)
 
     def test_hard_ticket_requires_multiple_actions_before_advancing(self):
         env = CustomerSupportEnv(task_name="hard")

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from env.environment import CustomerSupportEnv
 from env.models import Action
+from env.score_utils import MAX_SAFE_SCORE, SCORE_EPSILON
 from env.tasks import list_tasks
 
 
@@ -53,7 +54,7 @@ def get_metadata():
         "app": "server.app:app",
         "port": int(os.getenv("PORT", "8000")),
         "tasks": list_tasks(),
-        "reward_range": [1e-6, 1 - 1e-6],
+        "reward_range": [SCORE_EPSILON, MAX_SAFE_SCORE],
         "endpoints": {
             "reset": "/reset",
             "step": "/step",
@@ -74,7 +75,7 @@ def get_schema():
         "reward": {
             "type": "object",
             "properties": {
-                "score": {"type": "number", "minimum": 1e-6, "maximum": 1 - 1e-6},
+                "score": {"type": "number", "exclusiveMinimum": 0.0, "exclusiveMaximum": 1.0},
                 "feedback": {"type": "string"},
             },
             "required": ["score", "feedback"],

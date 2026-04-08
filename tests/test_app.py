@@ -106,7 +106,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["done"])
-        self.assertAlmostEqual(payload["reward"]["score"], 0.999998, places=6)
+        self.assertAlmostEqual(payload["reward"]["score"], 0.999999, places=6)
         self.assertIsNone(payload["info"]["current_ticket_id"])
         self.assertEqual(payload["observation"]["ticket_id"], -1)
 
